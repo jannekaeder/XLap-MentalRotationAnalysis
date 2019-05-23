@@ -1,0 +1,233 @@
+---
+title: "Practical Class: Data Analysis for the Mental Rotation Task"
+output: html_document
+---
+
+# Instructions
+* Download [this zip file](https://michael-franke.github.io/XPLab_2019/handouts/mental_rotation_analysis.zip). 
+* Download the results file from Stud.IP.
+* Open the .Rmd file in RStudio.
+* Fill in the code required (ask for help if needed!)
+* When you're done: 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+
+# Suggested resources
+* [RStudio cheatsheets](https://www.rstudio.com/resources/cheatsheets/).
+
+# Required R packages
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `brms`
+* `devtools` (for installing `faintr`)
+* `rstan`
+* `faintr` (install with `devtools`)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+
+```
+
+Load the required packages and set a seed for the random number generator.
+```{r}
+library(tidyverse)
+
+library(rstan)
+# set cores to use to the total number of cores (minimally 4)
+options(mc.cores = max(parallel::detectCores(), 4))
+# save a compiled version of the Stan model file
+rstan_options(auto_write = TRUE)
+
+library(brms)
+
+# install faintr with devtools::install_github('michael-franke/bayes_mixed_regression_tutorial/faintr', build_vignettes = TRUE))
+library(faintr)
+
+
+set.seed(123)
+
+```
+
+Step 1. Read the data and take a glimpse of it.
+---
+Use `read_csv()` and `glimpse()`
+
+```{r}
+# your code here
+data<-read_csv("mrt_results.csv")
+glimpse(data)
+```
+
+
+Step 2. Select only the columns of interest.
+---
+Do this with the `select()` command.
+
+```{r}
+# your code here
+data <- select(data,expected,RT,angle,correctness,item,submission_id, trial_type)
+```
+
+
+Step 3. Change columns to the correct data type.
+---
+Use `mutate()`:
+* `expected` should be a factor (also rename this to `condition`)
+* `correctness` should be a factor
+* `angle` should be a factor
+* `trial_type` should be a factor
+
+```{r}
+# your code here
+data<-mutate(data, condition= factor(expected),
+       angle= factor(angle), 
+       correctness= factor(correctness),
+       trial_type= factor(trial_type) 
+       )
+```
+
+
+Step 4. Show the data frame.
+---
+
+Check that everything is there and of the correct type.
+
+```{r}
+# your code here
+data
+```
+
+
+
+Step 5. Filter only the 'main' trials with correct responses.
+---
+
+Use `filter()`.
+
+```{r}
+# your code here
+data_filtered <- filter(data, trial_type =='main', correctness=='correct')
+```
+
+
+Step 6. Make a boxplot of the data.
+---
+
+Show condition (same/different) on the x-axis and RT on the y-axis.
+Show the different angles in different colors (fill). (use `ggplot()` and `geom_boxplot`)
+
+```{r}
+# your code here
+ggplot(data_filtered, aes(condition,RT, fill= angle)) +
+  geom_boxplot(stat="boxplot")
+```
+
+
+
+Step 7. Remove outliers
+---
+
+Use `filter()` to filter only response times that are in a reasonable range.
+
+```{r}
+# your code here
+data_filtered <- filter(data_filtered, RT<10000, RT > 2000)
+```
+
+
+Step 8. Show means for each design cell.
+---
+
+Use `group_by() %>% summarise()`.
+
+```{r}
+# your code here
+
+data_filtered %>% group_by(condition, angle) %>% summarise(mean(RT))
+```
+
+
+
+Step 9. Run a bayesian fixed-effects model 
+---
+Use `brm` to model the response times from angle, condition and angle*condition.
+
+
+```{r}
+# your code here
+formula = RT ~ angle*condition
+model = brm(formula, data_filtered)
+
+
+```
+
+
+
+Step 10. See how probable the following hypotheses are:
+---
+Use `faintr::compare_groups()`
+
+"Responses to 'same' trials are faster than responses to 'different' trials.
+
+```{r}
+# your code here
+compare_groups(model, higher = list(condition='different'), lower = list(condition='same') )
+```
+ 
+
+
+"Responses to '50 degree' trials are faster than responses to '150 degree' trials.
+```{r}
+# your code here
+compare_groups(model, higher = list(angle='150'), lower = list(angle='50') )
+
+```
+
+
+
+"Angle matters more than same/different for response times". (In other words, when the angle is lower but the objects are 'different', people are still faster than when the angle is higher but the objects are the 'same'.)
+
+```{r}
+# your code here
+compare_groups(model, higher = list(angle='150',condition= 'same'), lower = list(angle='50', condition='different'))
+```
+
+
+
+Step 11. Run the model again, but this time include random effects
+---
+
+Include random by-item intercepts (`+ (1|item)`).
+
+
+```{r}
+# your code here
+formula = RT ~ angle*condition + (1|item)
+model2 = brm(formula, data_filtered)
+```
+
+
+
+Step 12. Check the same hypotheses for the mixed effects model
+---
+
+```{r}
+# your code here
+compare_groups(model2, higher = list(condition='different'), lower = list(condition='same') )
+compare_groups(model2, higher = list(angle='150'), lower = list(angle='50') )
+compare_groups(model2, higher = list(angle='150',condition= 'same'), lower = list(angle='50', condition='different'))
+
+
+
+```
+
+
+
+Step 13. Conclude
+---
+
+Write a conclusion about the results.
+
+Since all hypothesis have a probability higher than 0.98 (even with random effects), they are most likely to be true. 
+Therefore we can say that the subjects are faster when the angle is lower and when the condition is same. However the lower angle matters more than the condition 'same'.
+
+___
+
+End of sheet.
